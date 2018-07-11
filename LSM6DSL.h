@@ -36,6 +36,7 @@ class LSM6DSL : public ExternalPeripheral {
 
     void WriteToFifoCntrl5(uint8_t value);
     void WriteToDrdyPulseCfg(uint8_t value);
+    void WriteToCtrl3C(uint8_t value);
     void TimerCallback();
     void LoadDataIntoOutputRegs();
     void ClearFifo();
