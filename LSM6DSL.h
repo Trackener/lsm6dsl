@@ -34,6 +34,22 @@ class LSM6DSL : public ExternalPeripheral {
         NONE_READ_WRITE
     } read_write_t;
 
+    typedef enum {
+        ACC_FS_2G  = 0x00,
+        ACC_FS_4G  = 0x04,
+        ACC_FS_8G  = 0x08,
+        ACC_FS_16G = 0x0C
+    } eACC_FS;
+
+
+    typedef enum {
+        G_FS_125DPS  = 0x02,
+        G_FS_250DPS  = 0x00,
+        G_FS_500DPS  = 0x04,
+        G_FS_1000DPS = 0x08,
+        G_FS_2000DPS = 0x0C
+    } eGYRO_FS;
+
     void WriteToFifoCntrl5(uint8_t value);
     void WriteToDrdyPulseCfg(uint8_t value);
     void WriteToCtrl3C(uint8_t value);

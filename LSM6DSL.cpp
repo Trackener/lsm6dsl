@@ -6,9 +6,9 @@
 #include <cstring>
 #include <math.h>
 
-#define WARNING(x) printf("[WARNING] "); printf(x)
-#define INFO(x) printf("[INFO] "); printf(x)
-#define ERROR(x) printf("[ERROR] "); printf(x)
+#define WARNING(x)      printf("[WARNING] "); printf(x)
+#define INFO(x)         printf("[INFO] "); printf(x)
+#define ERROR(x)        printf("[ERROR] "); printf(x)
 
 #define LSM6DSL_ACC_GYRO_FUNC_CFG_ACCESS              0X01
 
@@ -149,15 +149,14 @@ uint8_t registers_readonly[] = {0x0f, 0x1B, 0x1C, 0x1D, 0x1E, 0x20, 0x21, 0x22, 
 // 1: FIFO filling is equal to or higher than the watermark level
 #define WATER_M (0x1 << 7)
 
-#define REG_ADDRESS_MASK (0xFE)
 #define MODE_MASK (0x7)
 #define FIFO_ODR_MASK (0x78)
 
 #define WRITE_TO_REG (0x0)
 #define READ_TO_REG (0x1)
-#define READ_WRITE_BIT_MASK (0x1)
+#define READ_WRITE_BIT_MASK (0x80)
 
-#define REG_ADDRESS_MASK (0xFE)
+#define REG_ADDRESS_MASK (0x7F)
 
 #define DEVICE_CODE (0x11010110)
 
@@ -203,8 +202,8 @@ void LSM6DSL::Main() {
         if (spi_slave_->Transmit(&opcode, nullptr,  1) == 0) {
             continue;
         }
-        uint32_t reg_address = (opcode & REG_ADDRESS_MASK) >> 0x1;
-        if ((opcode & READ_WRITE_BIT_MASK) == WRITE_TO_REG) {
+        uint32_t reg_address = (opcode & REG_ADDRESS_MASK);
+        if ((opcode & READ_WRITE_BIT_MASK) == 0) {
             ReadDataFromMaster(reg_address);
         } else {
             WriteDataToMaster(reg_address);
@@ -240,6 +239,7 @@ void LSM6DSL::UpdateOdr() {
     } else if (timer_id_ != 0) {
         UpdateTimedCallback(timer_id_, ((pow(10, 9))/fifo_odr_));
     } else {
+        INFO("Set ODR\n");
         timer_id_ = AddTimedCallback((pow(10, 9))/(fifo_odr_), std::bind(&LSM6DSL::TimerCallback, this), false);
     }
 }
@@ -266,13 +266,76 @@ void LSM6DSL::WriteToCtrl3C(uint8_t value) {
 }
 
 void LSM6DSL::TimerCallback() {
-    if(fifo_.size() < MAX_FIFO_SIZE){
-        uint16_t sample =  GetNextInt16FromDataGenerator("accelerometer");
-        fifo_.push(sample);
-        if (!output_regs_update_) {
-            LoadDataIntoOutputRegs();
+    int acc_multiplier = 61;
+    int gyro_multiplier = 4375;
+
+    int xl_odr = memory_[LSM6DSL_ACC_GYRO_CTRL1_XL] & 0xe;
+    switch(xl_odr) {
+        case ACC_FS_2G: {
+            acc_multiplier = 61;
+            break;
         }
+        case ACC_FS_4G: {
+            acc_multiplier = 122;
+            break;
+        }
+        case ACC_FS_8G: {
+            acc_multiplier = 244;
+            break;
+        }
+        case ACC_FS_16G: {
+            acc_multiplier = 488;
+            break;
+        }
+        default:;
     }
+
+    int g_odr = memory_[LSM6DSL_ACC_GYRO_CTRL2_G] & 0xc;
+    switch(g_odr) {
+        case G_FS_125DPS:
+            gyro_multiplier = 4375;
+            break;
+        case G_FS_250DPS:
+            gyro_multiplier = 8750;
+            break;
+        case G_FS_500DPS:
+            gyro_multiplier = 17500;
+            break;
+        case G_FS_1000DPS:
+            gyro_multiplier = 35000;
+            break;
+        case G_FS_2000DPS:
+            gyro_multiplier = 70000;
+            break;
+        default:;
+    }
+    int16_t accx = (int16_t)GetNextInt16FromDataGenerator("accx");
+    int16_t accy =  (int16_t)(GetNextInt32FromDataGenerator("accy"));
+    int16_t accz =  (int16_t)(GetNextInt32FromDataGenerator("accz") / acc_multiplier);
+    int16_t gx =  (int16_t)(GetNextInt32FromDataGenerator("gx") / gyro_multiplier);
+    int16_t gy =  (int16_t)(GetNextInt32FromDataGenerator("gy") / gyro_multiplier);
+    int16_t gz =  (int16_t)(GetNextInt32FromDataGenerator("gz") / gyro_multiplier);
+    int16_t temperature =  GetNextInt16FromDataGenerator("temperature");
+
+    INFO("Updated data\n");
+
+    //XL regs
+    memory_[LSM6DSL_ACC_GYRO_OUTX_L_XL] = (uint8_t)(accx & 0xff);
+    memory_[LSM6DSL_ACC_GYRO_OUTX_H_XL] = (uint8_t)((accx >> 8) & 0xff);
+    memory_[LSM6DSL_ACC_GYRO_OUTY_L_XL] = (uint8_t)(accy & 0xff);
+    memory_[LSM6DSL_ACC_GYRO_OUTY_H_XL] = (uint8_t)((accy >> 8) & 0xff);
+    memory_[LSM6DSL_ACC_GYRO_OUTZ_L_XL] = (uint8_t)(accz & 0xff);
+    memory_[LSM6DSL_ACC_GYRO_OUTZ_H_XL] = (uint8_t)((accz >> 8) & 0xff);
+    //Gyro regs
+    memory_[LSM6DSL_ACC_GYRO_OUTX_L_G] = (uint8_t)(gx & 0xff);
+    memory_[LSM6DSL_ACC_GYRO_OUTX_H_G] = (uint8_t)((gx >> 8) & 0xff);
+    memory_[LSM6DSL_ACC_GYRO_OUTY_L_G] = (uint8_t)(gy & 0xff);
+    memory_[LSM6DSL_ACC_GYRO_OUTY_H_G] = (uint8_t)((gy >> 8) & 0xff);
+    memory_[LSM6DSL_ACC_GYRO_OUTZ_L_G] = (uint8_t)(gz & 0xff);
+    memory_[LSM6DSL_ACC_GYRO_OUTZ_H_G] = (uint8_t)((gz >> 8) & 0xff);
+    //Temperature
+    memory_[LSM6DSL_ACC_GYRO_OUT_TEMP_L] = (uint8_t)(temperature & 0xff);
+    memory_[LSM6DSL_ACC_GYRO_OUT_TEMP_H] = (uint8_t)((temperature >> 8) & 0xff);
 }
 
 void LSM6DSL::LoadDataIntoOutputRegs() {
@@ -301,7 +364,7 @@ void LSM6DSL::WriteDataToMaster(uint32_t start_reg_address) {
 
     // Check if we should read from this reg
     if (memchr(registers_resv, (uint8_t) start_reg_address, sizeof(registers_resv))) {
-        WARNING("Accessing resv registere!\r\n");
+        printf("[WARNING] Accessing resv registerer %x!\r\n", start_reg_address);
     }
 
     // Reading
@@ -358,6 +421,13 @@ void LSM6DSL::ReadDataFromMaster(uint32_t start_reg_address) {
             	WriteToCtrl3C(data);
             	break;
             }
+
+            case LSM6DSL_ACC_GYRO_CTRL1_XL:
+                memory_[current_reg_address] = data;
+                fifo_odr_ = odr_[data >> 4];
+                printf("Set odr to %f\n", fifo_odr_);
+                UpdateOdr();
+                break;
 
             default: {
                if (memchr(registers_readonly, current_reg_address, sizeof(registers_readonly)) ||

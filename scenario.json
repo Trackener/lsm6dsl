@@ -1,11 +1,40 @@
 {
-    "DataGenerators": [
-        {
-            "id": 1,
-            "type": "File",
-            "config": {
-                "path": "accelerometer_data"
-            }
+  "DataGenerators" : [
+    {
+      "id" : 1,
+      "type" : "Random",
+      "config" : {
+        "min" : -10000,
+        "max" : 10000,
+        "timing" : {
+          "changeInterval" : 2,
+          "changeIntervalUnit" : "ms"
         }
-    ]
+      }
+    },
+    {
+      "id" : 2,
+      "type" : "Random",
+      "config" : {
+        "min" : 989000,
+        "max" : 1010000,
+        "timing" : {
+          "changeInterval" : 3,
+          "changeIntervalUnit" : "ms"
+        }
+      }
+    },
+    {
+      "id" : 3,
+      "type" : "Random",
+      "config" : {
+        "min" : -10000,
+        "max" : 10000,
+        "timing" : {
+          "changeInterval" : 4,
+          "changeIntervalUnit" : "ms"
+        }
+      }
+    }
+  ]
 }
